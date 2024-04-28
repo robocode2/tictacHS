@@ -32,23 +32,32 @@ pieceIsOpen (Open _) = True
 pieceIsOpen _        = False
 
 
--- Return true if the index in this board is open (index is N-1)
-openSpace :: [Piece] -> Int -> Bool
+openSpace :: [Piece] -> Int -> Either String Bool
 openSpace board index
-    | length board < i         = False
-    | pieceIsOpen $ board !! i = True
-    | otherwise                = False
-    where i = index - 1
+    | index < 1 || index > length board = Left "Choose spaces (1-9)"
+    | pieceIsOpen $ board !! (index - 1) = Right True
+    | otherwise = Left "Space is not open. Choose another."
 
--- Given a game board, get a valid position to place a piece
+
 getPiecePosition :: [Piece] -> IO Int
 getPiecePosition board = do
     putStrLn "Enter an open position (1-9):"
-    input <- getChar
-    -- If input is a single digit, return as int, otherwise get input again
-    if input `elem` ['1' .. '9'] && openSpace board (read [input])
-        then return (read [input])
-        else getPiecePosition board
+    input <- getLine
+    if length input == 1 && head input `elem` ['1'..'9']
+        then do
+            let position = read [head input]
+            case openSpace board position of
+                Left errorMessage -> do
+                    putStrLn errorMessage
+                    getPiecePosition board
+                Right pieceIsOpen -> if pieceIsOpen
+                                then return position
+                                else do
+                                    getPiecePosition board
+        else do
+            putStrLn "Error: Please enter a valid digit (1-9)."
+            getPiecePosition board
+
 
 
 -- Makes a single Line of three items in a board list
@@ -127,25 +136,22 @@ playerWon board player = playerWonDiagonally board player || playerWonVertically
 tieGame :: [Piece] -> Bool
 tieGame board = all (\piece -> not (pieceIsOpen piece)) board
 
-
--- Check if anyone won/tied, if not, continue game
-checkBoardState :: [Piece] -> Char -> IO ()
-checkBoardState board playerChr
-    | tieGame board                 = putStrLn "It's a tie!"
-    | playerWon board (Player 'X')  = putStrLn "Player X won!"
-    | playerWon board (Player 'O')  = putStrLn "Player O won!"
-    | otherwise                     = runTicTacToe board (swapPlayers playerChr)
-
--- Main loop that actually runs the tic tac toe game
 runTicTacToe :: [Piece] -> Char -> IO ()
 runTicTacToe board playerChr = do
-    putStrLn $ showBoard board
+    putStrLn $ showBoard board  -- Print the initial state of the board
+    playGame board playerChr
+
+playGame :: [Piece] -> Char -> IO ()
+playGame board playerChr = do
     rawChoice <- getPiecePosition board
-    -- Create the new board after placing the player's piece on it
     let newBoard = placePiece board (Player playerChr) rawChoice
-    -- Check if anyone won, if not loop again
-    checkBoardState newBoard playerChr
-    putStrLn $ showBoard newBoard
+    putStrLn $ showBoard newBoard  -- Print the current state of the board
+    if playerWon newBoard (Player playerChr)
+        then putStrLn $ "Player " ++ [playerChr] ++ " won!"
+    else if tieGame newBoard
+        then putStrLn "It's a tie!"
+    else
+        playGame newBoard (if playerChr == 'X' then 'O' else 'X')
 
 
 main :: IO ()
